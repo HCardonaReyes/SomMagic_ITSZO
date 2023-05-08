@@ -2,21 +2,23 @@
 using System.Collections;
 using System;
 using UnityEngine.UI;
+using UnityEngine.Android;
+
 /// <summary>
 /// Static Maps from Google Maps
 /// For the full references please visit https://developers.google.com/maps/documentation/staticmaps/intro
 /// </summary>
 public class GoogleMaps : MonoBehaviour
 {
-    private string url = "https://maps.googleapis.com/maps/api/staticmap?";
+    private string url = "http://maps.googleapis.com/maps/api/staticmap?";
 
     // to get your api key visit https://console.developers.google.com/flows/enableapi?apiid=static_maps_backend&keyType=SERVER_SIDE
-    public string ApiKey = "AIzaSyBZEd1t4Mg3ZovHw60Jc14fNsL3hb4drIw";
+    public string ApiKey = "";
     public bool loadOnStart = true;
     public bool autoAdjustCenter = true;
     public GoogleMapLocation centerLocation;
     //supports value between 0 and 22
-    public int zoom = 3;
+    public int zoom = 22;
     public GoogleMapType mapType;
     //Max value is 640 (without api key)
     public int height = 640;
@@ -26,14 +28,33 @@ public class GoogleMaps : MonoBehaviour
     public GoogleMapMarker[] markers;
     public GoogleMapPath[] paths;
     public ImageFormat format = ImageFormat.png;
-    public RawImage image;
+
+    public bool isUpdating;
+
     void Start()
     {
+        //if (!isUpdating)
+        //{
+        //    StartCoroutine(GetLocation());
+        //    isUpdating = !isUpdating;
+        //}
         //if (loadOnStart)
         //{
-            //GetMapTexture();
+        //    LoadMapaLocation();
+         //   GetMapTexture();
         //}
     }
+
+    public void LoadMapaLocation()
+    {
+        if (!isUpdating)
+        {
+            StartCoroutine(GetLocation());
+            GetMapTexture();
+            //isUpdating = !isUpdating;
+        }
+    }
+
 
     public void GetMapTexture()
     {
@@ -55,13 +76,10 @@ public class GoogleMaps : MonoBehaviour
     IEnumerator LoadImage()
     {
         var querryString = CreateQuerryString();
-        Debug.Log(querryString);
         var request = new WWW(url + querryString);
-        Debug.Log(request.url.ToString());
         yield return request;
-
         //GetComponent<Renderer>().material.mainTexture = request.texture;
-        image.texture = request.texture;
+        GetComponent<RawImage>().texture = request.texture;
     }
 
     //Creates querry for loading map image
@@ -123,11 +141,10 @@ public class GoogleMaps : MonoBehaviour
     {
         foreach (var marker in markers)
         {
-            //querry += "&markers=" + string.Format("size:{0}|color:{1}|label:{2}|{3}", marker.Size.ToString().ToLower(), marker.Color, marker.Label, marker.Locations[0].Latitude + "," + marker.Locations[0].Longitude);
             querry += "&markers=" + string.Format("size:{0}|color:{1}|label:{2}", marker.Size.ToString().ToLower(), marker.Color, marker.Label);
+
             querry = AddLocationToUrl(querry, marker.Locations);
         }
-        Debug.Log(querry);
         return querry;
     }
 
@@ -164,6 +181,61 @@ public class GoogleMaps : MonoBehaviour
         }
         return querry;
     }
+
+    IEnumerator GetLocation()
+    {
+        if (!Permission.HasUserAuthorizedPermission(Permission.FineLocation))
+        {
+            Permission.RequestUserPermission(Permission.FineLocation);
+            Permission.RequestUserPermission(Permission.CoarseLocation);
+        }
+        // First, check if user has location service enabled
+        if (!Input.location.isEnabledByUser)
+            yield return new WaitForSeconds(3);
+
+        // Start service before querying location
+        Input.location.Start();
+
+        // Wait until service initializes
+        int maxWait = 3;
+        while (Input.location.status == LocationServiceStatus.Initializing && maxWait > 0)
+        {
+            yield return new WaitForSeconds(1);
+            maxWait--;
+        }
+
+        // Service didn't initialize in 20 seconds
+        if (maxWait < 1)
+        {
+            //gpsOut.text = "Timed out";
+            print("Timed out");
+            yield break;
+        }
+
+        // Connection has failed
+        if (Input.location.status == LocationServiceStatus.Failed)
+        {
+            //gpsOut.text = "Unable to determine device location";
+            print("Unable to determine device location");
+            yield break;
+        }
+        else
+        {
+            centerLocation.Latitude = Input.location.lastData.latitude;
+            centerLocation.Longitude = Input.location.lastData.longitude;
+            //gpsOut.text = "Location: " + Input.location.lastData.latitude + " " + Input.location.lastData.longitude + " " + Input.location.lastData.altitude + 100f + " " + Input.location.lastData.horizontalAccuracy + " " + Input.location.lastData.timestamp;
+            // Access granted and location value could be retrieved
+            print("Location: " + Input.location.lastData.latitude + " " + Input.location.lastData.longitude + " " + Input.location.lastData.altitude + " " + Input.location.lastData.horizontalAccuracy + " " + Input.location.lastData.timestamp);
+        }
+
+        // Stop service if there is no need to query location updates continuously
+        //isUpdating = !isUpdating;
+        Input.location.Stop();
+    }
+
+
+
+
 }
 
 public enum ImageFormat
